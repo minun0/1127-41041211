@@ -13,17 +13,28 @@
 
     <h1 class="text-center mt-5">Google 登入與筆記</h1>
 
-    <!-- 顯示用戶資料按鈕，初始隱藏 -->
+    <!-- 彈出顯示用戶資料的按鈕 -->
     <div class="text-center mt-4">
-        <button id="showUserInfoButton" class="btn btn-info" style="display: none;">顯示會員資料</button>
+        <button id="showUserInfoButton" class="btn btn-info" style="display: none;" data-bs-toggle="modal"
+            data-bs-target="#userInfoModal">顯示會員資料</button>
     </div>
 
-    <!-- 用戶資料區域 -->
-    <div id="userInfo" style="display: none; text-align: center;" class="mt-4">
-        <img id="userPhoto" style="width: 100px; border-radius: 50%;" alt="使用者圖片">
-        <p id="userName" class="mt-4"></p>
-        <p id="userEmail"></p>
-        <p id="lastLogin"></p> <!-- 顯示最後一次登入時間 -->
+    <!-- 用戶資料 Modal -->
+    <div class="modal fade" id="userInfoModal" tabindex="-1" aria-labelledby="userInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="userInfoModalLabel">會員資料</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="userPhoto" style="width: 100px; border-radius: 50%;" alt="使用者圖片">
+                    <p id="userName" class="mt-3"></p>
+                    <p id="userEmail"></p>
+                    <p id="lastLogin"></p> <!-- 顯示最後一次登入時間 -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="d-flex justify-content-center mt-4">
@@ -252,7 +263,7 @@
                 .then((result) => {
                     const user = result.user;
 
-                    // 顯示使用者資訊
+                    // 更新會員資料內容
                     document.getElementById('userName').textContent = `名稱: ${user.displayName}`;
                     document.getElementById('userEmail').textContent = `電子郵件: ${user.email}`;
                     document.getElementById('userPhoto').src = user.photoURL;
@@ -264,15 +275,13 @@
                         lastLogin: lastLoginTime
                     });
 
-                    // 顯示用戶資料與輸入表單
-                    document.getElementById('userInfo').style.display = "block";
-                    document.getElementById("inputForm").style.display = "block";
-
-                    // 顯示最後一次登入時間
                     document.getElementById('lastLogin').textContent = `最後一次登入: ${new Date(lastLoginTime).toLocaleString()}`;
 
                     // 顯示會員資料按鈕
                     document.getElementById('showUserInfoButton').style.display = "inline-block";
+
+                    // 顯示輸入表單
+                    document.getElementById("inputForm").style.display = "block";
 
                     // 隱藏登入與註冊按鈕，顯示登出按鈕
                     document.getElementById('registerButton').style.display = "none";
