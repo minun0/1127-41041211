@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google 認證與筆記</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body style="max-width: 80%; margin: auto;">
+
+    <h1 class="text-center mt-5">Google 登入與筆記</h1>
+
+    <!-- 顯示用戶資料按鈕，初始隱藏 -->
+    <div class="text-center mt-4">
+        <button id="showUserInfoButton" class="btn btn-info" style="display: none;">顯示會員資料</button>
+    </div>
+
+    <!-- 用戶資料區域 -->
+    <div id="userInfo" style="display: none; text-align: center;" class="mt-4">
+        <img id="userPhoto" style="width: 100px; border-radius: 50%;" alt="使用者圖片">
+        <p id="userName" class="mt-4"></p>
+        <p id="userEmail"></p>
+        <p id="lastLogin"></p> <!-- 顯示最後一次登入時間 -->
+    </div>
+
+    <div class="d-flex justify-content-center mt-4">
+        <button id="registerButton" class="btn btn-success me-2">註冊</button>
+        <button id="loginButton" class="btn btn-primary me-2">登入</button>
+        <button id="logoutButton" class="btn btn-danger" style="display: none;">登出</button>
+    </div>
+
+    <!-- 顯示輸入表單 -->
+    <div id="inputForm" class="mt-4" style="display: none;">
+        <h3>新增筆記</h3>
+        <div class="mb-3">
+            <input type="text" id="dataTitle" class="form-control" placeholder="輸入標題">
+        </div>
+        <div class="mb-3">
+            <textarea id="dataContent" class="form-control" rows="3" placeholder="輸入內容"></textarea>
+        </div>
+        <button id="saveDataButton" class="btn btn-primary">儲存筆記</button>
+    </div>
+
+    <!-- 顯示筆記內容 -->
+    <div id="notesContent" class="mb-4" style="display: none;">
+        <h3>我的筆記</h3>
+        <div id="noteList" class="d-flex flex-wrap"></div>
+    </div>
+
+    <div class="modal fade" id="editNoteModal" tabindex="-1" aria-labelledby="editNoteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editNoteModalLabel">編輯筆記</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="mb-3">
+                            <label for="modalTitle" class="form-label">標題</label>
+                            <input type="text" class="form-control" id="modalTitle">
+                        </div>
+                        <div class="mb-3">
+                            <label for="modalContent" class="form-label">內容</label>
+                            <textarea class="form-control" id="modalContent" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" id="saveEditButton" class="btn btn-primary">儲存變更</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Authentication Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getDatabase, ref, set, push, get, update } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC9Vh08zW2a0HRkH5blrmDWDw4dn5MZhqY",
+            authDomain: "project-3324233956660786569.firebaseapp.com",
+            projectId: "project-3324233956660786569",
+            storageBucket: "project-3324233956660786569.appspot.com",
+            messagingSenderId: "316236396808",
+            appId: "1:316236396808:web:bbf59280315ea864bc54bd",
+            databaseURL: "https://project-3324233956660786569-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+        const database = getDatabase(app);
+
+        // 將電子郵件中的無效字符替換為有效字符
+        function sanitizeEmail(email) {
+            return email.replace(/[.#$[\]]/g, '_');
+        }
+
+        // 儲存筆記到資料庫
+        document.getElementById("saveDataButton").addEventListener("click", () => {
+            const title = document.getElementById("dataTitle").value;
+            const content = document.getElementById("dataContent").value;
+
+            if (!auth.currentUser) {
+                alert("請先登入！");
+                return;
+            }
+
+            if (title.trim() === "" || content.trim() === "") {
+                alert("標題與內容不能為空！");
+                return;
+            }
+
+            const email = sanitizeEmail(auth.currentUser.email);
+            const userNotesRef = ref(database, `${email}/notes`);
+            const newNoteRef = push(userNotesRef);
+
+            set(newNoteRef, {
+                title: title,
+                content: content,
+                timestamp: new Date().toISOString(),
+            })
+                .then(() => {
+                    alert("筆記已儲存！");
+                    document.getElementById("dataTitle").value = "";
+                    document.getElementById("dataContent").value = "";
+                    displayUserNotes();
+                })
+                .catch((error) => {
+                    console.error("儲存筆記失敗：", error);
+                });
+        });
+
+        // 顯示使用者筆記
+        function displayUserNotes() {
+            const email = sanitizeEmail(auth.currentUser?.email);
+            const userNotesRef = ref(database, `${email}/notes`);
+            const noteList = document.getElementById("noteList");
+            noteList.innerHTML = ""; // 清空筆記列表
+
+            get(userNotesRef)
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const notes = snapshot.val();
+
+                        for (const id in notes) {
+                            const note = notes[id];
+                            const noteCard = document.createElement("div");
+                            noteCard.classList.add("card", "m-2");
+                            noteCard.style.width = "18rem";
+
+                            noteCard.innerHTML = `
+                        <div class="card-body">
+                            <h5 class="card-title">${note.title}</h5>
+                            <p class="card-text">${note.content}</p>
+                            <p class="text-muted">儲存時間：${new Date(note.timestamp).toLocaleString()}</p>
+                            <button class="btn btn-warning btn-sm me-2 edit-note-button" data-id="${id}">編輯</button>
+                            <button class="btn btn-danger btn-sm delete-note-button" data-id="${id}">刪除</button>
+                        </div>
+                    `;
+                            noteList.appendChild(noteCard);
+
+                            // 綁定編輯事件
+                            noteCard.querySelector(".edit-note-button").addEventListener("click", () => {
+                                editNoteHandler(id, note);
+                            });
+
+                            // 綁定刪除事件
+                            noteCard.querySelector(".delete-note-button").addEventListener("click", () => {
+                                deleteNoteHandler(id);
+                            });
+                        }
+
+                        document.getElementById("notesContent").style.display = "block";
+                    } else {
+                        document.getElementById("notesContent").style.display = "none";
+                    }
+                })
+                .catch((error) => {
+                    console.error("讀取筆記失敗：", error);
+                });
+        }
+
+        // 編輯筆記
+        function editNoteHandler(noteId, note) {
+            // 填入目前的筆記標題與內容到 Modal
+            document.getElementById("modalTitle").value = note.title;
+            document.getElementById("modalContent").value = note.content;
+
+            // 顯示 Modal
+            const editNoteModal = new bootstrap.Modal(document.getElementById("editNoteModal"));
+            editNoteModal.show();
+
+            // 重新設定 Modal 的儲存按鈕事件
+            const saveEditButton = document.getElementById("saveEditButton");
+            saveEditButton.onclick = () => {
+                const updatedTitle = document.getElementById("modalTitle").value.trim();
+                const updatedContent = document.getElementById("modalContent").value.trim();
+
+                if (updatedTitle === "" || updatedContent === "") {
+                    alert("標題與內容不能為空！");
+                    return;
+                }
+
+                const email = sanitizeEmail(auth.currentUser.email);
+                const noteRef = ref(database, `${email}/notes/${noteId}`);
+
+                // 更新資料庫內容
+                update(noteRef, {
+                    title: updatedTitle,
+                    content: updatedContent,
+                    timestamp: new Date().toISOString(),
+                })
+                    .then(() => {
+                        alert("筆記已更新！");
+                        editNoteModal.hide();
+                        displayUserNotes(); // 刷新筆記列表
+                    })
+                    .catch((error) => {
+                        console.error("更新筆記失敗：", error);
+                    });
+            };
+        }
+
+        // 刪除筆記
+        function deleteNoteHandler(noteId) {
+            if (confirm("確定要刪除此筆記嗎？")) {
+                const email = sanitizeEmail(auth.currentUser.email);
+                const noteRef = ref(database, `${email}/notes/${noteId}`);
+
+                set(noteRef, null) // 設為 null 即刪除資料
+                    .then(() => {
+                        alert("筆記已刪除！");
+                        displayUserNotes();
+                    })
+                    .catch((error) => {
+                        console.error("刪除筆記失敗：", error);
+                    });
+            }
+        }
+
+        // 登入按鈕
+        document.getElementById('loginButton').addEventListener('click', () => {
+            signInWithPopup(auth, provider)
+                .then((result) => {
+                    const user = result.user;
+
+                    // 顯示使用者資訊
+                    document.getElementById('userName').textContent = `名稱: ${user.displayName}`;
+                    document.getElementById('userEmail').textContent = `電子郵件: ${user.email}`;
+                    document.getElementById('userPhoto').src = user.photoURL;
+
+                    // 更新最後一次登入時間
+                    const lastLoginTime = new Date().toISOString();
+                    const userRef = ref(database, sanitizeEmail(user.email));
+                    update(userRef, {
+                        lastLogin: lastLoginTime
+                    });
+
+                    // 顯示用戶資料與輸入表單
+                    document.getElementById('userInfo').style.display = "block";
+                    document.getElementById("inputForm").style.display = "block";
+
+                    // 顯示最後一次登入時間
+                    document.getElementById('lastLogin').textContent = `最後一次登入: ${new Date(lastLoginTime).toLocaleString()}`;
+
+                    // 顯示會員資料按鈕
+                    document.getElementById('showUserInfoButton').style.display = "inline-block";
+
+                    // 隱藏登入與註冊按鈕，顯示登出按鈕
+                    document.getElementById('registerButton').style.display = "none";
+                    document.getElementById('loginButton').style.display = "none";
+                    document.getElementById('logoutButton').style.display = "inline-block";
+
+                    alert("登入成功！");
+                    displayUserNotes();
+                })
+                .catch((error) => {
+                    console.error("登入失敗：", error);
+                });
+        });
+
+        // 登出按鈕
+        document.getElementById('logoutButton').addEventListener('click', () => {
+            signOut(auth).then(() => {
+                document.getElementById('userInfo').style.display = "none";
+                document.getElementById("inputForm").style.display = "none";
+                document.getElementById("notesContent").style.display = "none";
+
+                document.getElementById('showUserInfoButton').style.display = "none";  // 隱藏會員資料按鈕
+                document.getElementById('registerButton').style.display = "inline-block";
+                document.getElementById('loginButton').style.display = "inline-block";
+                document.getElementById('logoutButton').style.display = "none";
+
+                alert("登出成功！");
+            }).catch((error) => {
+                console.error("登出失敗：", error);
+            });
+        });
+
+        // 顯示/隱藏用戶資料
+        document.getElementById('showUserInfoButton').addEventListener('click', () => {
+            const userInfo = document.getElementById('userInfo');
+            if (userInfo.style.display === "none") {
+                userInfo.style.display = "block";
+                document.getElementById('showUserInfoButton').textContent = "隱藏會員資料";
+            } else {
+                userInfo.style.display = "none";
+                document.getElementById('showUserInfoButton').textContent = "顯示會員資料";
+            }
+        });
+    </script>
+
+    <!-- 引入 Bootstrap JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
